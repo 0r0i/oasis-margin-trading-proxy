@@ -1,8 +1,10 @@
 pragma solidity ^0.4.23;
 
 contract OtcInterface {
-    function sellAllAmount(address, uint, address, uint) public returns (uint);
+    function getBuyAmount(address, address, uint) public returns (uint);
+    function buyAllAmount(address, uint, address, uint) public returns (uint);
     function getPayAmount(address, address, uint) public returns (uint);
+    function sellAllAmount(address, uint, address, uint) public returns (uint);
 }
 
 contract TokenInterface {
@@ -10,6 +12,8 @@ contract TokenInterface {
     function approve(address, uint) public;
     function deposit() public payable;
     function withdraw(uint) public;
+    function transferFrom(address src, address dst, uint wad) public returns (bool);
+    function allowance(address src, address guy) public view returns (uint);
 }
 
 contract TubInterface {
@@ -26,6 +30,7 @@ contract TubInterface {
     function per() public pure returns (uint);
     function gap() public pure returns (uint);
     function pip() public returns (PipInterface);
+    function ink(bytes32 cup) public view returns (uint);
 }
 
 contract VoxInterface {

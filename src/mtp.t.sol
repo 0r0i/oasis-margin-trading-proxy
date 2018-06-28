@@ -10,9 +10,7 @@ import "sai/tap.sol";
 
 import "maker-otc/matching_market.sol";
 
-import "./.sol";
-//import "../lib/sai/lib/ds-value/src/value.sol";
-//import "../lib/maker-otc/lib/ds-token/lib/ds-stop/lib/ds-note/lib/ds-test/src/test.sol";
+import "./mtp.sol";
 
 contract MtpTest is DSTest, DSMath {
 
@@ -47,16 +45,11 @@ contract MtpTest is DSTest, DSMath {
         gem = new DSToken("WETH");
         gov = new DSToken("MKR");
 
-        gem.mint(6 ether);
-
-        //Verify initial token balances
-        assertEq(gem.balanceOf(this), 6 ether);
-        assertEq(gem.balanceOf(tub), 0 ether);
-        assertEq(skr.totalSupply(), 0 ether);
+        gem.mint(10000 ether);
+        sai.mint(1000000 ether);
     }
 
     function setupTub() {
-        pip = new DSValue();
         pip = new DSValue();
         pep = new DSValue();
         dad = new DSGuard();
@@ -65,41 +58,60 @@ contract MtpTest is DSTest, DSMath {
         tap = 0x456;
         tub.turn(tap);
 
+        // gem price 435.97 USD
+        tub.pip().poke(435970000000000000000);
 
-        //Set whitelist authority
-        skr.setAuthority(dad);
+        // gov price 483.88
+        tub.pip().poke(483580000000000000000);
 
         //Permit tub to 'mint' and 'burn' SKR
+        skr.setAuthority(dad);
         dad.permit(tub, skr, bytes4(keccak256('mint(address,uint256)')));
         dad.permit(tub, skr, bytes4(keccak256('burn(address,uint256)')));
+
+        //Permit tub to 'mint' and 'burn' SAI
+        sai.setAuthority(dad);
+        dad.permit(tub, sai, bytes4(keccak256('mint(address,uint256)')));
+        dad.permit(tub, sai, bytes4(keccak256('burn(address,uint256)')));
 
         //Allow tub to mint, burn, and transfer gem/skr without approval
         gem.approve(tub);
         skr.approve(tub);
         sai.approve(tub);
 
+        tub.mold('cap', 1000000000 ether);
+
         assert(!tub.off());
 
     }
 
     function setupOtc() public {
-
         otc = new MatchingMarket(uint64(now + 1 weeks));
-
         otc.addTokenPairWhitelist(sai, gov);
+        otc.addTokenPairWhitelist(sai, gem);
+        sai.approve(otc, uint(-1));
+        gem.approve(otc, uint(-1));
+    }
+
+    function setupMtp() public {
+        mtp = new Mtp(
+            OtcInterface(address(otc)),
+            TubInterface(address(tub)));
+        sai.approve(mtp, uint(-1));
     }
 
     function setUp() public {
         setupTokens();
         setupTub();
         setupOtc();
-        mtp = new Mtp();
+        setupMtp();
     }
 
-    function testMarginTrage() {
-        mtc.marginTrade(
-            TubInterface(address(tub)),
-            OtcInterface(address(otc)),
-            1);
+    function testMarginTrade() {
+        uint offerId = otc.offer(100 ether, gem, 50000 ether, sai, 0);
+        assertEq(tub.ink(mtp.marginTrade(10 ether, 1 ether)), 0.02 ether);
+        assertEq(tub.ink(mtp.marginTrade(10 ether, 1.5 ether)), 0.03 ether);
+        assertEq(tub.ink(mtp.marginTrade(10 ether, 1.75 ether)), 0.035 ether);
+        assertEq(tub.ink(mtp.marginTrade(10 ether, 2 ether)), 0.040 ether);
     }
 }
