@@ -27,37 +27,42 @@ contract Mtp is DSMath, DSNote {
         buyAmount = otc.getBuyAmount(tub.gem(), tub.sai(), payAmount);
         otc.buyAllAmount(tub.gem(), buyAmount, tub.sai(), payAmount);
 
+        emit Log('buy', buyAmount);
+
         return buyAmount;
     }
 
-    function joinLock(bytes32 cup, uint256 wethAmount)
-        public note returns (uint256 pethAmount)
+    function joinLock(bytes32 cup, uint256 gemAmount)
+        public note returns (uint256 skrAmount)
     {
-        pethAmount = rdiv(wethAmount, wmul(tub.per(), tub.gap()));
+        // per - gem per skr
+        // gap - gap between buy and sell
+        skrAmount = rdiv(gemAmount, wmul(tub.per(), tub.gap()));
 
-        tub.gem().balanceOf(this);
+        tub.join(skrAmount);
+        tub.lock(cup, skrAmount);
 
-        tub.join(pethAmount);
+        emit Log('lock', skrAmount);
 
-        tub.lock(cup, pethAmount);
-
-        return pethAmount;
+        return skrAmount;
     }
 
-    function draw(bytes32 cup, uint wethAmount, uint maxSai2Draw)
+    function draw(bytes32 cup, uint skrAmount, uint maxSai2Draw)
         public note returns (uint)
     {
-        Log('maxSai2Draw', maxSai2Draw);
-
         if(maxSai2Draw == 0) {
             return 0;
         }
 
+        // mat - liquidation ratio
+        // pip - ref per gem
+        // par - ref per sai (target price)
+
         // Thanks Gonzalo!
-        uint256 sai2Draw = min(
+        uint sai2Draw = min(
             rdiv(
                 rmul(
-                    rdiv(wethAmount * 10 ** 9, tub.mat()),
+                    rdiv(skrAmount * 10 ** 9, tub.mat()),
                     uint(tub.pip().read())
                 ),
                 tub.vox().par()
@@ -65,57 +70,71 @@ contract Mtp is DSMath, DSNote {
             maxSai2Draw
         );
 
+        emit Log('draw', sai2Draw);
+
         tub.draw(cup, sai2Draw);
 
         return sai2Draw;
     }
 
-    function marginTrade(uint cash, uint leverage)
+    function marginTrade(uint sai, uint leverage)
         public payable note returns (bytes32 cup)
     {
+        require(leverage >= 1 ether);
 
-        require(leverage >= 1 ether && leverage < 3 ether);
+        tub.sai().transferFrom(msg.sender, this, sai);
 
-        tub.sai().transferFrom(msg.sender, this, cash);
+        uint saiAtHand = sai;
+        uint targetSaiSpent = wmul(saiAtHand, leverage);
 
-        Log('cash', cash);
-        Log('leverage', leverage);
-
-        uint cashAtHand = cash;
-        uint targetCashSpent = wmul(cashAtHand, leverage);
-
-        Log('targetCashSpent', targetCashSpent);
-
-        uint currentCashSpent = 0;
-        uint currentCollateralLocked = 0;
+        uint currentSaiSpent = 0;
 
         uint i = 0;
 
         cup = tub.open();
 
         do {
-            uint collateralAtHand = buy(cashAtHand);
-            currentCashSpent = currentCashSpent + cashAtHand;
+            uint gemAtHand = buy(saiAtHand);
+            currentSaiSpent = currentSaiSpent + saiAtHand;
+            uint skrLocked = joinLock(cup, gemAtHand);
+            saiAtHand = draw(cup, skrLocked, targetSaiSpent - currentSaiSpent);
 
-            uint collateralLocked = joinLock(cup, collateralAtHand);
-
-            currentCollateralLocked = currentCollateralLocked + collateralLocked;
-
-            Log('collateralLocked', collateralLocked);
-            Log('targetCashSpent', targetCashSpent);
-            Log('currentCashSpent', currentCashSpent);
-
-            cashAtHand = draw(cup, collateralLocked, targetCashSpent - currentCashSpent);
-
-            Log('cashAtHand', cashAtHand);
-
-        } while (cashAtHand > 0 && i++ < 10); //TODO: requires discussion!
+        } while (saiAtHand > 0 && i++ < 10); //TODO: requires discussion!
 
         // TODO: requires discussion!
-        require(cashAtHand  == 0);
-
-        Log('cup.ink', tub.ink(cup));
+        require(saiAtHand == 0);
 
         tub.give(cup, msg.sender);
+    }
+
+
+    function getOffers(OtcInterface otc, address payToken, address buyToken, uint start)
+        public view returns (uint[100] ids, uint[100] payAmts, uint[100] buyAmts, address[100] owners, uint[100] timestamps)
+    {
+        uint i = 0;
+        uint j = 0;
+
+        uint offerId = otc.getBestOffer(payToken, buyToken);
+
+        while(offerId != 0 && j < 100) {
+            if(i++ >= start) {
+                ids[j] = offerId;
+                (payAmts[j],, buyAmts[j],, owners[j], timestamps[j]) = otc.offers(offerId);
+                j++;
+            }
+            offerId = otc.getWorseOffer(offerId);
+        }
+    }
+
+    function getOffers2(OtcInterface otc, uint offerId)
+        public view returns (uint[100] ids, uint[100] payAmts, uint[100] buyAmts, address[100] owners, uint[100] timestamps)
+    {
+        uint i = 0;
+        do {
+            offerId = otc.getWorseOffer(offerId);
+            if(offerId == 0) break;
+            ids[i] = offerId;
+            (payAmts[i],, buyAmts[i],, owners[i], timestamps[i]) = otc.offers(offerId);
+        } while (i++ < 100);
     }
 }

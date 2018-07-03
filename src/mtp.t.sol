@@ -24,7 +24,6 @@ contract MtpTest is DSTest, DSMath {
     DSToken gov;  // mkr
     DSToken dgd;  // dgd
 
-
     // tup
     address tap;
     SaiTub  tub;
@@ -108,8 +107,9 @@ contract MtpTest is DSTest, DSMath {
     }
 
     function testMarginTrade() {
-        uint offerId = otc.offer(100 ether, gem, 50000 ether, sai, 0);
-        assertEq(tub.ink(mtp.marginTrade(10 ether, 1 ether)), 0.02 ether);
+        otc.offer(100 ether, gem, 50000 ether, sai, 0);
+//        assertEq(tub.ink(mtp.marginTrade(10 ether, 1 ether)), 0.02 ether);
+
         assertEq(tub.ink(mtp.marginTrade(10 ether, 1.5 ether)), 0.03 ether);
         assertEq(tub.ink(mtp.marginTrade(10 ether, 1.75 ether)), 0.035 ether);
         assertEq(tub.ink(mtp.marginTrade(10 ether, 2 ether)), 0.040 ether);
