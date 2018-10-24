@@ -106,35 +106,4 @@ contract Mtp is DSMath, DSNote {
 
         tub.give(cup, msg.sender);
     }
-
-
-    function getOffers(OtcInterface otc, address payToken, address buyToken, uint start)
-        public view returns (uint[100] ids, uint[100] payAmts, uint[100] buyAmts, address[100] owners, uint[100] timestamps)
-    {
-        uint i = 0;
-        uint j = 0;
-
-        uint offerId = otc.getBestOffer(payToken, buyToken);
-
-        while(offerId != 0 && j < 100) {
-            if(i++ >= start) {
-                ids[j] = offerId;
-                (payAmts[j],, buyAmts[j],, owners[j], timestamps[j]) = otc.offers(offerId);
-                j++;
-            }
-            offerId = otc.getWorseOffer(offerId);
-        }
-    }
-
-    function getOffers2(OtcInterface otc, uint offerId)
-        public view returns (uint[100] ids, uint[100] payAmts, uint[100] buyAmts, address[100] owners, uint[100] timestamps)
-    {
-        uint i = 0;
-        do {
-            offerId = otc.getWorseOffer(offerId);
-            if(offerId == 0) break;
-            ids[i] = offerId;
-            (payAmts[i],, buyAmts[i],, owners[i], timestamps[i]) = otc.offers(offerId);
-        } while (i++ < 100);
-    }
 }
